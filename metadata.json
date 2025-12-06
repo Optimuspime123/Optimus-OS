@@ -1,0 +1,5 @@
+{
+  "name": "Optimus-OS",
+  "description": "A futuristic, browser-based Linux shell environment featuring a custom Stack-VM C Compiler, process management, and a glassmorphism desktop.",
+  "requestFramePermissions": []
+}
