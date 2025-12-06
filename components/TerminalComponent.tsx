@@ -3,6 +3,7 @@ import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { Shell } from '../services/Shell';
 import { fileSystem } from '../services/FileSystem';
+import { processManager } from '../services/ProcessManager';
 
 interface TerminalProps {
   onOpenApp: (type: string, arg?: string) => void;
@@ -46,7 +47,14 @@ export const TerminalComponent: React.FC<TerminalProps> = React.memo(({ onOpenAp
         if (shellRef.current.foregroundPID !== null) return '';
         return `\r\n\x1b[1;34moptimus\x1b[0m:\x1b[1;32m${fileSystem.getCurrentPathString()}\x1b[0m$ `;
     };
-    
+
+    const isProgramInputMode = () => {
+      const pid = shellRef.current.foregroundPID;
+      if (pid === null) return false;
+      const proc = processManager.getProcess(pid);
+      return !!proc && proc.state === 'WAITING_INPUT';
+    };
+
     const refreshLine = () => {
       // Clear current line and move to start
       term.write('\x1b[2K\r');
@@ -79,6 +87,7 @@ export const TerminalComponent: React.FC<TerminalProps> = React.memo(({ onOpenAp
 
     term.onData(async (data) => {
       const code = data.charCodeAt(0);
+      const programInput = isProgramInputMode();
 
       // Enter
       if (code === 13) {
@@ -100,7 +109,7 @@ export const TerminalComponent: React.FC<TerminalProps> = React.memo(({ onOpenAp
             (out) => {
                term.write(out.replace(/\n/g, '\r\n'));
                // Only scroll to bottom if we are outputting data to ensure visibility of long loops
-               term.scrollToBottom(); 
+               term.scrollToBottom();
             },
             (err) => {
                term.writeln(`\x1b[31m${err}\x1b[0m`);
@@ -121,7 +130,11 @@ export const TerminalComponent: React.FC<TerminalProps> = React.memo(({ onOpenAp
           const right = inputBuffer.current.slice(cursorIdx.current);
           inputBuffer.current = left + right;
           cursorIdx.current--;
-          refreshLine();
+          if (programInput) {
+            term.write('\b \b');
+          } else {
+            refreshLine();
+          }
         }
       }
       // Ctrl+C
@@ -141,6 +154,7 @@ export const TerminalComponent: React.FC<TerminalProps> = React.memo(({ onOpenAp
       }
       // Arrows (ANSI)
       else if (code === 27) {
+         if (programInput) return;
          if (data === '\x1b[A') { // Up
            const history = shellRef.current.history;
            if (history.length > 0) {
@@ -176,6 +190,7 @@ export const TerminalComponent: React.FC<TerminalProps> = React.memo(({ onOpenAp
       }
       // Tab
       else if (code === 9) {
+        if (programInput) return;
         const match = shellRef.current.complete(inputBuffer.current);
         if (match) {
            inputBuffer.current = match;
@@ -189,7 +204,11 @@ export const TerminalComponent: React.FC<TerminalProps> = React.memo(({ onOpenAp
         const right = inputBuffer.current.slice(cursorIdx.current);
         inputBuffer.current = left + data + right;
         cursorIdx.current++;
-        refreshLine();
+        if (programInput) {
+          term.write(data);
+        } else {
+          refreshLine();
+        }
       }
     });
 

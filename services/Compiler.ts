@@ -379,7 +379,7 @@ export class Compiler {
     else if (t.value === 'scanf') {
         this.consume(); this.consume('SYMBOL', '(');
         const fmtStr = this.consume('STRING').value;
-        const matches = fmtStr.match(/%[-+ #0-9.]*[dfcsx]/g) || [];
+        const matches = fmtStr.match(/%[-+ #0-9.]*l?[dfcsx]/g) || [];
         const numArgs = matches.length;
         
         for (let i = 0; i < numArgs; i++) { this.consume('SYMBOL', ','); this.parseExpression(); }

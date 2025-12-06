@@ -81,16 +81,25 @@ export class ProcessVM {
       for (let i = 0; i < fmt.length; i++) {
           if (fmt[i] === '%') {
               i++;
+              while (i < fmt.length && ' +-#0'.includes(fmt[i])) i++; // flags
+              while (i < fmt.length && /[0-9]/.test(fmt[i])) i++; // width
+              if (fmt[i] === '.') { i++; while (i < fmt.length && /[0-9]/.test(fmt[i])) i++; }
+
+              let lengthMod = '';
+              if (fmt[i] === 'l') { lengthMod = 'l'; i++; }
+
               const type = fmt[i];
               if (inputIdx >= inputs.length || typeIdx >= args.length) break;
-              
+
               const raw = inputs[inputIdx++];
               const addr = args[typeIdx++];
-              
+
               if (type === 'd') {
                   this.setMemory(addr, parseInt(raw) || 0);
               } else if (type === 'f') {
-                  this.setMemory(addr, parseFloat(raw) || 0);
+                  const val = parseFloat(raw) || 0;
+                  if (lengthMod === 'l') this.setMemory64(addr, val);
+                  else this.setMemory(addr, val);
               } else if (type === 'c') {
                   this.setMemory(addr, raw.charCodeAt(0));
               } else if (type === 's') {
