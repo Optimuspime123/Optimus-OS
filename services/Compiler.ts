@@ -260,41 +260,8 @@ export class Compiler {
 
     // Variable Decl
     if (['int', 'float', 'char', 'double'].includes(t.value)) {
-      const typeStr = this.consume().value;
-      let isPtr = false;
-      if (this.peek().value === '*') { isPtr = true; this.consume(); }
-
-      const name = this.consume('ID').value;
-      let isArray = false;
-      let arraySize = 0;
-      
-      if (this.peek().value === '[') {
-        this.consume();
-        arraySize = parseInt(this.consume('NUMBER').value);
-        this.consume('SYMBOL', ']');
-        isArray = true;
-      }
-      
-      const isDouble = typeStr === 'double' && !isPtr;
-      const elementSize = isDouble ? 8 : 4;
-      const sizeBytes = isArray ? arraySize * elementSize : elementSize;
-      
-      const offset = this.localOffset;
-      this.localOffset += sizeBytes;
-      
-      this.locals.set(name, { offset, type: isPtr ? typeStr + '*' : typeStr, isArray, arraySize, elementSize });
-      
-      if (this.peek().value === '=') {
-        if (isArray) this.error("Array init not supported.");
-        this.consume();
-        this.parseExpression(); 
-        if (isDouble) {
-             this.emit(OpCode.STORE64, offset);
-        } else {
-             this.emit(OpCode.STORE, offset);
-        }
-      }
-      this.consume('SYMBOL', ';');
+      const baseType = this.consume().value;
+      this.parseDeclarationList(baseType, true);
     }
     // Control Flow
     else if (t.value === 'if') {
@@ -330,11 +297,16 @@ export class Compiler {
     }
     else if (t.value === 'for') {
       this.consume(); this.consume('SYMBOL', '(');
-      if (this.peek().value !== ';') {
+      if (['int', 'float', 'char', 'double'].includes(this.peek().value)) {
+          const baseType = this.consume().value;
+          this.parseDeclarationList(baseType, true);
+      } else if (this.peek().value !== ';') {
           this.parseExpression();
           this.emit(OpCode.POP); // Consume initializer result
+          this.consume('SYMBOL', ';');
+      } else {
+          this.consume('SYMBOL', ';');
       }
-      this.consume('SYMBOL', ';');
       
       const condIdx = this.instructions.length;
       if (this.peek().value !== ';') this.parseExpression();
@@ -401,6 +373,48 @@ export class Compiler {
     }
   }
 
+  private parseDeclarationList(baseType: string, consumeSemicolon: boolean) {
+    while (true) {
+      let ptrDepth = 0;
+      while (this.peek().value === '*') { this.consume(); ptrDepth++; }
+
+      const name = this.consume('ID').value;
+      let isArray = false;
+      let arraySize = 0;
+
+      if (this.peek().value === '[') {
+        this.consume();
+        arraySize = parseInt(this.consume('NUMBER').value);
+        this.consume('SYMBOL', ']');
+        isArray = true;
+      }
+
+      const isPtr = ptrDepth > 0;
+      const isDouble = baseType === 'double' && !isPtr;
+      const elementSize = isPtr ? 4 : (isDouble ? 8 : 4);
+      const sizeBytes = isArray ? arraySize * elementSize : elementSize;
+
+      const offset = this.localOffset;
+      this.localOffset += sizeBytes;
+
+      const typeStr = isPtr ? baseType + '*'.repeat(ptrDepth) : baseType;
+      this.locals.set(name, { offset, type: typeStr, isArray, arraySize, elementSize });
+
+      if (this.peek().value === '=') {
+        if (isArray) this.error("Array init not supported.");
+        this.consume();
+        this.parseExpression();
+        if (elementSize === 8 && !isPtr) this.emit(OpCode.STORE64, offset);
+        else this.emit(OpCode.STORE, offset);
+      }
+
+      if (this.peek().value === ',') { this.consume(); continue; }
+      break;
+    }
+
+    if (consumeSemicolon) this.consume('SYMBOL', ';');
+  }
+
   // --- Expression Parser (Precedence Climbing) ---
   
   private parseExpression() { this.parseAssignment(); }
@@ -436,10 +450,11 @@ export class Compiler {
 
   private parseEquality() {
       this.parseRelational();
-      while (['==', '!=', '<=', '>='].includes(this.peek().value)) {
+      while (['==', '!='].includes(this.peek().value)) {
           const op = this.consume().value;
           this.parseRelational();
-          this.emit(OpCode.EQ); // Simplified, specific opcode logic in parseRelational
+          if (op === '==') this.emit(OpCode.EQ);
+          else this.emit(OpCode.NEQ);
       }
   }
 
@@ -449,8 +464,9 @@ export class Compiler {
           const op = this.consume().value;
           this.parseAdditive();
           if (op === '<') this.emit(OpCode.LT);
-          if (op === '>') this.emit(OpCode.GT);
-          // TODO: LE, GE (Needs new OpCodes or synthesis)
+          else if (op === '>') this.emit(OpCode.GT);
+          else if (op === '<=') this.emit(OpCode.LE);
+          else if (op === '>=') this.emit(OpCode.GE);
       }
   }
 
@@ -464,12 +480,36 @@ export class Compiler {
   }
 
   private parseMultiplicative() {
-      this.parseTerm();
+      this.parseUnary();
       while (['*', '/', '%'].includes(this.peek().value)) {
           const op = this.consume().value;
-          this.parseTerm();
+          this.parseUnary();
           this.emit(op === '*' ? OpCode.MUL : (op === '/' ? OpCode.DIV : OpCode.MOD));
       }
+  }
+
+  private parseUnary() {
+    const t = this.peek();
+    if (t.value === '!') {
+        this.consume();
+        this.parseUnary();
+        this.emit(OpCode.LIT, 0);
+        this.emit(OpCode.EQ);
+        return;
+    }
+    if (t.value === '-') {
+        this.consume();
+        this.parseUnary();
+        this.emit(OpCode.LIT, -1);
+        this.emit(OpCode.MUL);
+        return;
+    }
+    if (t.value === '+') {
+        this.consume();
+        this.parseUnary();
+        return;
+    }
+    this.parseTerm();
   }
 
   private parseTerm() {

@@ -166,6 +166,18 @@ export class ProcessVM {
          this.stack.push(a > b ? 1 : 0);
          break;
       }
+      case OpCode.LE: {
+         const b = this.stack.pop()!;
+         const a = this.stack.pop()!;
+         this.stack.push(a <= b ? 1 : 0);
+         break;
+      }
+      case OpCode.GE: {
+         const b = this.stack.pop()!;
+         const a = this.stack.pop()!;
+         this.stack.push(a >= b ? 1 : 0);
+         break;
+      }
       
       case OpCode.JMP: this.pc = Number(instr.arg); break;
       case OpCode.JZ: {
