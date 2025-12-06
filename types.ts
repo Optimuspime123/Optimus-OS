@@ -64,6 +64,8 @@ export enum OpCode {
   NEQ = 'NEQ',
   LT = 'LT',
   GT = 'GT',
+  LE = 'LE',
+  GE = 'GE',
   PRINT = 'PRINT',   // Syscall: printf (variadic)
   SCANF = 'SCANF',   // Syscall: scanf
   MALLOC = 'MALLOC', // Syscall: malloc

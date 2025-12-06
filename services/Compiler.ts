@@ -436,10 +436,11 @@ export class Compiler {
 
   private parseEquality() {
       this.parseRelational();
-      while (['==', '!=', '<=', '>='].includes(this.peek().value)) {
+      while (['==', '!='].includes(this.peek().value)) {
           const op = this.consume().value;
           this.parseRelational();
-          this.emit(OpCode.EQ); // Simplified, specific opcode logic in parseRelational
+          if (op === '==') this.emit(OpCode.EQ);
+          else this.emit(OpCode.NEQ);
       }
   }
 
@@ -449,8 +450,9 @@ export class Compiler {
           const op = this.consume().value;
           this.parseAdditive();
           if (op === '<') this.emit(OpCode.LT);
-          if (op === '>') this.emit(OpCode.GT);
-          // TODO: LE, GE (Needs new OpCodes or synthesis)
+          else if (op === '>') this.emit(OpCode.GT);
+          else if (op === '<=') this.emit(OpCode.LE);
+          else if (op === '>=') this.emit(OpCode.GE);
       }
   }
 
