@@ -1,4 +1,5 @@
 
+
 import { Instruction, OpCode } from '../types';
 
 interface Token {
@@ -12,6 +13,7 @@ interface SymbolInfo {
   type: string;   
   isArray: boolean;
   arraySize?: number;
+  elementSize: number;
 }
 
 export class Compiler {
@@ -152,7 +154,7 @@ export class Compiler {
       if (isAlpha(c)) {
         let val = "";
         while (i < source.length && (isAlpha(source[i]) || isNum(source[i]))) val += source[i++];
-        const kw = ['int', 'void', 'char', 'float', 'return', 'if', 'else', 'while', 'for', 'printf', 'scanf', 'malloc', 'free', 'sin', 'cos', 'tan', 'sqrt', 'pow', 'abs'];
+        const kw = ['int', 'void', 'char', 'float', 'double', 'return', 'if', 'else', 'while', 'for', 'printf', 'scanf', 'malloc', 'free', 'sin', 'cos', 'tan', 'sqrt', 'pow', 'abs'];
         tokens.push({ type: kw.includes(val) ? 'KEYWORD' : 'ID', value: val, line });
         continue;
       }
@@ -257,7 +259,7 @@ export class Compiler {
     const t = this.peek();
 
     // Variable Decl
-    if (['int', 'float', 'char'].includes(t.value)) {
+    if (['int', 'float', 'char', 'double'].includes(t.value)) {
       const typeStr = this.consume().value;
       let isPtr = false;
       if (this.peek().value === '*') { isPtr = true; this.consume(); }
@@ -273,17 +275,24 @@ export class Compiler {
         isArray = true;
       }
       
-      const sizeBytes = isArray ? arraySize * 4 : 4; 
+      const isDouble = typeStr === 'double' && !isPtr;
+      const elementSize = isDouble ? 8 : 4;
+      const sizeBytes = isArray ? arraySize * elementSize : elementSize;
+      
       const offset = this.localOffset;
       this.localOffset += sizeBytes;
       
-      this.locals.set(name, { offset, type: isPtr ? typeStr + '*' : typeStr, isArray, arraySize });
+      this.locals.set(name, { offset, type: isPtr ? typeStr + '*' : typeStr, isArray, arraySize, elementSize });
       
       if (this.peek().value === '=') {
         if (isArray) this.error("Array init not supported.");
         this.consume();
         this.parseExpression(); 
-        this.emit(OpCode.STORE, offset);
+        if (isDouble) {
+             this.emit(OpCode.STORE64, offset);
+        } else {
+             this.emit(OpCode.STORE, offset);
+        }
       }
       this.consume('SYMBOL', ';');
     }
@@ -407,9 +416,15 @@ export class Compiler {
          if (!sym) this.error(`Undefined variable '${name}'`);
          this.consume('SYMBOL', '=');
          this.parseAssignment(); // Right Associative
-         this.emit(OpCode.STORE, sym.offset);
-         // Expression result is the value stored, leave on stack
-         this.emit(OpCode.LOAD, sym.offset); 
+         
+         if (sym.elementSize === 8) {
+             this.emit(OpCode.STORE64, sym.offset);
+             this.emit(OpCode.LOAD64, sym.offset);
+         } else {
+             this.emit(OpCode.STORE, sym.offset);
+             // Expression result is the value stored, leave on stack
+             this.emit(OpCode.LOAD, sym.offset); 
+         }
     }
     else if (t.type === 'ID' && next?.value === '[') {
         this.parseEquality();
@@ -500,21 +515,24 @@ export class Compiler {
             // Calculate Address
             this.emit(OpCode.P_PUSH, sym!.offset);
             this.parseExpression(); // Index
-            this.emit(OpCode.LIT, 4); this.emit(OpCode.MUL); this.emit(OpCode.ADD);
+            this.emit(OpCode.LIT, sym!.elementSize); this.emit(OpCode.MUL); this.emit(OpCode.ADD);
             this.consume('SYMBOL', ']');
 
             // Check if this is an assignment: arr[i] = val
             if (this.peek().value === '=') {
                 this.consume();
                 this.parseExpression(); // Value
-                this.emit(OpCode.S_IND); // Store Indirect
+                if (sym!.elementSize === 8) this.emit(OpCode.S_IND64);
+                else this.emit(OpCode.S_IND);
                 this.emit(OpCode.LIT, 0); // Result is void/0 for now
             } else {
-                this.emit(OpCode.L_IND); // Load value
+                if (sym!.elementSize === 8) this.emit(OpCode.L_IND64);
+                else this.emit(OpCode.L_IND); // Load value
             }
         } 
         else {
-             this.emit(OpCode.LOAD, sym!.offset);
+             if (sym.elementSize === 8) this.emit(OpCode.LOAD64, sym!.offset);
+             else this.emit(OpCode.LOAD, sym!.offset);
         }
         return;
     }

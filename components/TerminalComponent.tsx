@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
@@ -31,13 +30,16 @@ export const TerminalComponent: React.FC<TerminalProps> = React.memo(({ onOpenAp
         cursor: '#00ff9d',
         selectionBackground: 'rgba(0, 255, 157, 0.3)',
       },
-      allowProposedApi: true
+      allowProposedApi: true,
+      scrollback: 5000
     });
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(terminalRef.current);
-    fitAddon.fit();
+    
+    // Small delay to ensure container is sized correctly before fitting
+    setTimeout(() => fitAddon.fit(), 50);
 
     const promptStr = () => {
         // Only show prompt if NOT waiting for input in a program
@@ -95,8 +97,15 @@ export const TerminalComponent: React.FC<TerminalProps> = React.memo(({ onOpenAp
         // Pass everything to shell handleInput
         shellRef.current.handleInput(
             cmd,
-            (out) => term.write(out.replace(/\n/g, '\r\n')),
-            (err) => term.writeln(`\x1b[31m${err}\x1b[0m`),
+            (out) => {
+               term.write(out.replace(/\n/g, '\r\n'));
+               // Only scroll to bottom if we are outputting data to ensure visibility of long loops
+               term.scrollToBottom(); 
+            },
+            (err) => {
+               term.writeln(`\x1b[31m${err}\x1b[0m`);
+               term.scrollToBottom();
+            },
             onOpenApp
         );
 
@@ -117,16 +126,18 @@ export const TerminalComponent: React.FC<TerminalProps> = React.memo(({ onOpenAp
       }
       // Ctrl+C
       else if (code === 3) {
+          term.write('^C\r\n');
+          inputBuffer.current = '';
+          cursorIdx.current = 0;
+          
           if (shellRef.current.foregroundPID !== null) {
               const pid = shellRef.current.foregroundPID;
               // Kill process
               import('../services/ProcessManager').then(m => m.processManager.killProcess(pid));
+              term.writeln('Process ended by user.');
               shellRef.current.foregroundPID = null;
-              term.writeln('^C');
-              inputBuffer.current = '';
-              cursorIdx.current = 0;
-              term.write(promptStr());
           }
+          term.write(promptStr());
       }
       // Arrows (ANSI)
       else if (code === 27) {

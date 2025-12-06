@@ -25,6 +25,7 @@ export const Editor: React.FC<EditorProps> = ({ filePath, onClose }) => {
   const [cursorPos, setCursorPos] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
+  const lineNumbersRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -68,9 +69,15 @@ export const Editor: React.FC<EditorProps> = ({ filePath, onClose }) => {
   };
   
   const handleScroll = () => {
-    if (textareaRef.current && preRef.current) {
-        preRef.current.scrollTop = textareaRef.current.scrollTop;
-        preRef.current.scrollLeft = textareaRef.current.scrollLeft;
+    if (textareaRef.current) {
+        const { scrollTop, scrollLeft } = textareaRef.current;
+        if (preRef.current) {
+            preRef.current.scrollTop = scrollTop;
+            preRef.current.scrollLeft = scrollLeft;
+        }
+        if (lineNumbersRef.current) {
+            lineNumbersRef.current.scrollTop = scrollTop;
+        }
     }
   };
 
@@ -85,6 +92,11 @@ export const Editor: React.FC<EditorProps> = ({ filePath, onClose }) => {
 
   // Syntax Highlighting & Tokenization
   const highlightedHTML = useMemo(() => {
+    // Optimization for very long files to prevent UI freeze
+    if (content.length > 50000) {
+        return content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '<br/>';
+    }
+
     // 1. Identify Bracket at Cursor (Look at char before and at cursor)
     let matchedIndices = new Set<number>();
     const checkIndices = [cursorPos, cursorPos - 1];
@@ -214,17 +226,20 @@ export const Editor: React.FC<EditorProps> = ({ filePath, onClose }) => {
       {/* Editor Area */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Line Numbers */}
-        <div className="w-12 bg-[#1e1e1e] border-r border-[#3e3e3e] text-right pr-3 pt-4 text-[#6e7681] select-none overflow-hidden font-mono text-sm leading-6 z-20">
+        <div 
+            ref={lineNumbersRef}
+            className="w-12 bg-[#1e1e1e] border-r border-[#3e3e3e] text-right pr-3 pt-4 text-[#6e7681] select-none overflow-hidden font-mono text-sm leading-6 z-20"
+        >
            {lineNumbers.map(n => <div key={n} className="leading-6">{n}</div>)}
         </div>
 
         {/* Editor Container */}
-        <div className="flex-1 relative font-mono text-sm h-full">
+        <div className="flex-1 relative font-mono text-sm h-full bg-[#1e1e1e]">
             
             {/* Syntax Highlighted Layer (Background) */}
             <pre 
                 ref={preRef}
-                className="absolute inset-0 p-4 m-0 bg-[#1e1e1e] whitespace-pre overflow-hidden pointer-events-none leading-6 font-mono"
+                className="absolute inset-0 p-4 m-0 bg-transparent whitespace-pre overflow-hidden pointer-events-none leading-6 font-mono"
                 dangerouslySetInnerHTML={{ __html: highlightedHTML }}
             />
 

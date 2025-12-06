@@ -1,4 +1,5 @@
 
+
 import { Instruction, OpCode } from '../types';
 
 export class ProcessVM {
@@ -250,6 +251,18 @@ export class ProcessVM {
         this.stack.push(val);
         break;
       }
+      case OpCode.STORE64: {
+        const val = this.stack.pop()!;
+        const offset = Number(instr.arg);
+        this.setMemory64(this.fp + offset, val);
+        break;
+      }
+      case OpCode.LOAD64: {
+        const offset = Number(instr.arg);
+        const val = this.getMemory64(this.fp + offset);
+        this.stack.push(val);
+        break;
+      }
       case OpCode.P_PUSH: {
         const offset = Number(instr.arg);
         this.stack.push(this.fp + offset);
@@ -264,6 +277,18 @@ export class ProcessVM {
       case OpCode.L_IND: {
         const addr = this.stack.pop()!;
         const val = this.getMemory(addr);
+        this.stack.push(val);
+        break;
+      }
+      case OpCode.S_IND64: {
+        const val = this.stack.pop()!;
+        const addr = this.stack.pop()!;
+        this.setMemory64(addr, val);
+        break;
+      }
+      case OpCode.L_IND64: {
+        const addr = this.stack.pop()!;
+        const val = this.getMemory64(addr);
         this.stack.push(val);
         break;
       }
@@ -306,6 +331,11 @@ export class ProcessVM {
     this.dataView.setFloat32(addr, val, true); 
   }
   
+  private setMemory64(addr: number, val: number) {
+    if (addr < 0 || addr >= this.memory.length - 8) throw new Error(`Segfault: Write ${addr}`);
+    this.dataView.setFloat64(addr, val, true); 
+  }
+  
   private setMemoryByte(addr: number, val: number) {
       if (addr < 0 || addr >= this.memory.length) throw new Error(`Segfault: Write Byte ${addr}`);
       this.memory[addr] = val;
@@ -314,5 +344,10 @@ export class ProcessVM {
   private getMemory(addr: number): number {
     if (addr < 0 || addr >= this.memory.length - 4) throw new Error(`Segfault: Read ${addr}`);
     return this.dataView.getFloat32(addr, true);
+  }
+
+  private getMemory64(addr: number): number {
+    if (addr < 0 || addr >= this.memory.length - 8) throw new Error(`Segfault: Read ${addr}`);
+    return this.dataView.getFloat64(addr, true);
   }
 }

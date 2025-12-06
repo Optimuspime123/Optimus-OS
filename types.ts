@@ -1,4 +1,5 @@
 
+
 export enum FileType {
   FILE = 'FILE',
   DIRECTORY = 'DIRECTORY',
@@ -46,6 +47,8 @@ export enum OpCode {
   LIT = 'LIT',       // Push literal
   LOAD = 'LOAD',     // Load from address relative to FP
   STORE = 'STORE',   // Store to address relative to FP
+  LOAD64 = 'LOAD64', // Load 64-bit float
+  STORE64 = 'STORE64', // Store 64-bit float
   GLOAD = 'GLOAD',   // Load global
   GSTORE = 'GSTORE', // Store global
   CALL = 'CALL',     // Call function
@@ -68,6 +71,8 @@ export enum OpCode {
   P_PUSH = 'P_PUSH', // Pointer Push (LEA)
   L_IND = 'L_IND',   // Load Indirect (*p)
   S_IND = 'S_IND',   // Store Indirect (*p = x)
+  L_IND64 = 'L_IND64', // Load Indirect 64-bit
+  S_IND64 = 'S_IND64', // Store Indirect 64-bit
   FRAME = 'FRAME',   // Setup stack frame
   ITOF = 'ITOF',     // Int to Float
   POP = 'POP',       // Pop stack (discard value)
