@@ -68,23 +68,37 @@ export const Editor: React.FC<EditorProps> = ({ filePath, onClose }) => {
     }
   };
   
-  const handleScroll = () => {
+  const syncScroll = () => {
     if (textareaRef.current) {
-        const { scrollTop, scrollLeft } = textareaRef.current;
-        if (preRef.current) {
-            preRef.current.scrollTop = scrollTop;
-            preRef.current.scrollLeft = scrollLeft;
-        }
-        if (lineNumbersRef.current) {
-            lineNumbersRef.current.scrollTop = scrollTop;
-        }
+      const { scrollTop, scrollLeft } = textareaRef.current;
+      if (preRef.current) {
+        preRef.current.scrollTop = scrollTop;
+        preRef.current.scrollLeft = scrollLeft;
+      }
+      if (lineNumbersRef.current) {
+        lineNumbersRef.current.scrollTop = scrollTop;
+      }
     }
+  };
+
+  const handleScroll = () => {
+    syncScroll();
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       setContent(e.target.value);
       setCursorPos(e.target.selectionStart);
   };
+
+  const handlePaste = () => {
+    // After a paste, the textarea may resize/scroll before the next paint
+    requestAnimationFrame(syncScroll);
+  };
+
+  useEffect(() => {
+    // Keep background layers in sync when content changes (e.g., paste large text)
+    syncScroll();
+  }, [content]);
   
   const handleSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
       setCursorPos(e.currentTarget.selectionStart);
@@ -254,6 +268,7 @@ export const Editor: React.FC<EditorProps> = ({ filePath, onClose }) => {
                 onSelect={handleSelect}
                 onClick={handleSelect}
                 onKeyUp={handleSelect}
+                onPaste={handlePaste}
                 spellCheck={false}
                 autoCapitalize="off"
                 autoComplete="off"

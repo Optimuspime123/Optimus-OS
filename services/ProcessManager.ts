@@ -1,15 +1,27 @@
 import { Process } from '../types';
 import { ProcessVM } from './VirtualMachine';
 
+interface ProcessEntry {
+  vm: ProcessVM;
+  name: string;
+  startTime: number;
+  memoryUsage: number;
+}
+
 class ProcessManager {
-  private processes: Map<number, ProcessVM> = new Map();
+  private processes: Map<number, ProcessEntry> = new Map();
   private nextPid = 100;
   private listeners: (() => void)[] = [];
 
   public createProcess(name: string, bytecode: any[], data: Uint8Array, stdout: (s: string) => void): number {
     const pid = this.nextPid++;
     const vm = new ProcessVM(pid, bytecode, data, stdout);
-    this.processes.set(pid, vm);
+    this.processes.set(pid, {
+      vm,
+      name,
+      startTime: Date.now(),
+      memoryUsage: 64,
+    });
     this.notify();
     return pid;
   }
@@ -17,30 +29,44 @@ class ProcessManager {
   public killProcess(pid: number) {
     const proc = this.processes.get(pid);
     if (proc) {
-      proc.state = 'TERMINATED';
+      proc.vm.state = 'TERMINATED';
       this.processes.delete(pid);
       this.notify();
     }
   }
 
+  private cleanupTerminated() {
+    let removed = false;
+    for (const [pid, proc] of this.processes.entries()) {
+      if (proc.vm.state === 'TERMINATED') {
+        this.processes.delete(pid);
+        removed = true;
+      }
+    }
+    if (removed) this.notify();
+  }
+
   public getProcessList(): Process[] {
-    return Array.from(this.processes.values()).map(vm => ({
-      id: vm.pid,
-      pid: vm.pid,
-      name: `proc_${vm.pid}`,
-      state: vm.state as any,
-      memoryUsage: 64, // KB
-      startTime: Date.now()
+    this.cleanupTerminated();
+    return Array.from(this.processes.entries()).map(([pid, entry]) => ({
+      id: pid,
+      pid,
+      name: entry.name,
+      state: entry.vm.state as any,
+      memoryUsage: entry.memoryUsage,
+      startTime: entry.startTime,
     }));
   }
 
   public getProcess(pid: number) {
-    return this.processes.get(pid);
+    return this.processes.get(pid)?.vm;
   }
-  
+
   public subscribe(cb: () => void) {
     this.listeners.push(cb);
-    return () => { this.listeners = this.listeners.filter(l => l !== cb); }
+    return () => {
+      this.listeners = this.listeners.filter(l => l !== cb);
+    };
   }
 
   private notify() {
