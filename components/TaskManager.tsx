@@ -42,7 +42,7 @@ export const TaskManager: React.FC = () => {
                     {p.state}
                   </span>
                 </td>
-                <td className="py-2 text-gray-400">64 KB</td>
+                <td className="py-2 text-gray-400">{p.memoryUsage} KB</td>
                 <td className="py-2">
                   <button 
                     onClick={() => processManager.killProcess(p.pid)}

@@ -5,12 +5,15 @@ import { TerminalComponent } from './components/TerminalComponent';
 import { Editor } from './components/Editor';
 import { TaskManager } from './components/TaskManager';
 import { Terminal, Code, Cpu, Power, HardDrive, FileText, Trash2, Moon, Settings, Upload, Monitor, Box, Search, Grid } from 'lucide-react';
+import { processManager } from './services/ProcessManager';
 
 const App: React.FC = () => {
   const [isSleeping, setIsSleeping] = useState(false);
   const [startMenuOpen, setStartMenuOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [backgroundImage, setBackgroundImage] = useState('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop');
+
+  const windowProcessMap = React.useRef<Record<string, number>>({});
   
   const [windows, setWindows] = useState<WindowState[]>([
     {
@@ -31,6 +34,30 @@ const App: React.FC = () => {
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  const deriveProcessName = useCallback((win: WindowState) => {
+    if (win.type === 'EDITOR') return `Editor (${win.filePath || 'untitled'})`;
+    if (win.type === 'TERMINAL') return 'Terminal';
+    if (win.type === 'TASK_MANAGER') return 'Task Manager';
+    if (win.type === 'SETTINGS') return 'Settings';
+    return win.title || win.type;
+  }, []);
+
+  const registerWindowProcess = useCallback((win: WindowState) => {
+    if (windowProcessMap.current[win.id]) return;
+    const pid = processManager.registerSystemProcess(deriveProcessName(win), 24, win.id);
+    windowProcessMap.current[win.id] = pid;
+  }, [deriveProcessName]);
+
+  const removeWindowProcess = useCallback((windowId: string) => {
+    const pid = windowProcessMap.current[windowId];
+    if (pid) {
+      processManager.killProcess(pid);
+      delete windowProcessMap.current[windowId];
+    } else {
+      processManager.killProcessByWindow(windowId);
+    }
   }, []);
 
   const createWindow = useCallback((type: string, arg?: string) => {
@@ -58,6 +85,7 @@ const App: React.FC = () => {
   const closeWindow = useCallback((id: string) => {
     setWindows(prev => {
       const next = prev.filter(w => w.id !== id);
+      removeWindowProcess(id);
       if (next.length === 0) {
         setActiveWindowId('');
         return next;
@@ -68,7 +96,7 @@ const App: React.FC = () => {
       }
       return next;
     });
-  }, [activeWindowId]);
+  }, [activeWindowId, removeWindowProcess]);
   
   const focusWindow = useCallback((id: string) => {
     setActiveWindowId(id);
@@ -80,6 +108,17 @@ const App: React.FC = () => {
   }, []);
 
   const toggleSleep = () => setIsSleeping(!isSleeping);
+
+  useEffect(() => {
+    windows.forEach(win => registerWindowProcess(win));
+
+    const activeIds = new Set(windows.map(w => w.id));
+    Object.keys(windowProcessMap.current).forEach(id => {
+      if (!activeIds.has(id)) {
+        removeWindowProcess(id);
+      }
+    });
+  }, [windows, registerWindowProcess, removeWindowProcess]);
 
   const DesktopIcon = ({ label, icon: Icon, action }: any) => (
     <div 
