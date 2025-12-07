@@ -63,7 +63,7 @@ export class Shell {
       }
     },
     'help': (_, out) => {
-      out(`Optimus-OS Shell v2.2\nedit, gcc, ./file, ps, kill, top, ls, cd, cat`);
+      out(`Optimus-OS Shell v2.2\n\nCommands:\n  edit <file>  - Open file in editor\n  gcc <file>   - Compile C source file\n  ./a.out      - Run compiled program\n  ls, cd, cat  - File operations\n  ps, kill     - Process management\n  top          - Task Manager\n  clear, help  - Utilities\n\nC Language Support:\n  - Control: if/else, while, for, do-while, switch/case\n  - Loop control: break, continue\n  - Math: sin, cos, tan, sqrt, pow, abs\n  - Multi-var decls: int a=1, b=2, c;`);
     }
   };
   

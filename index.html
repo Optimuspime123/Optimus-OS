@@ -8,66 +8,150 @@
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
     <style>
+      :root {
+        --accent: #7dd3fc;
+        --accent-soft: #a78bfa;
+        --glass-bg: rgba(8, 12, 24, 0.72);
+        --glass-border: rgba(255, 255, 255, 0.16);
+        --glass-blur: 28px;
+        --glass-shadow: 0 24px 60px rgba(3, 7, 18, 0.65);
+        --window-radius: 18px;
+        --text-primary: rgba(248, 250, 255, 0.94);
+        --text-secondary: rgba(203, 213, 225, 0.78);
+      }
+
       body {
         font-family: 'Inter', sans-serif;
-        background-color: #000;
+        background-color: #030712;
+        color: var(--text-primary);
         overflow: hidden;
         margin: 0;
         padding: 0;
       }
       
-      /* CRT Scanline Effect */
       body::after {
         content: "";
         position: absolute;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
+        inset: 0;
         background: linear-gradient(
           to bottom,
           rgba(255, 255, 255, 0),
           rgba(255, 255, 255, 0) 50%,
-          rgba(0, 0, 0, 0.1) 50%,
-          rgba(0, 0, 0, 0.1)
+          rgba(0, 0, 0, 0.08) 50%,
+          rgba(0, 0, 0, 0.08)
         );
         background-size: 100% 4px;
         pointer-events: none;
         z-index: 9999;
-        opacity: 0.3;
+        opacity: 0.2;
       }
 
       .glass-panel {
-        background: rgba(13, 13, 20, 0.75);
-        backdrop-filter: blur(25px);
-        -webkit-backdrop-filter: blur(25px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        background: var(--glass-bg);
+        backdrop-filter: blur(var(--glass-blur)) saturate(185%);
+        -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(185%);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--glass-shadow);
+        border-radius: var(--window-radius);
       }
       
       .terminal-font {
         font-family: 'JetBrains Mono', monospace;
       }
 
+      .window-frame {
+        --window-scale: 1;
+        --window-dx: 0px;
+        --window-dy: 0px;
+        border-radius: var(--window-radius);
+        transform: translate3d(var(--window-dx), var(--window-dy), 0) scale(var(--window-scale));
+        transition: transform 140ms ease, box-shadow 220ms ease, border-color 220ms ease;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .window-frame.active {
+        box-shadow: var(--glass-shadow), 0 0 0 1px rgba(125, 211, 252, 0.35);
+        border-color: rgba(125, 211, 252, 0.45);
+      }
+
+      .window-frame.dragging {
+        --window-scale: 1.01;
+      }
+
+      .window-resize-handle {
+        position: absolute;
+        right: 14px;
+        bottom: 12px;
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.12);
+        cursor: nwse-resize;
+        opacity: 0;
+        transition: opacity 150ms ease;
+      }
+
+      .window-frame:hover .window-resize-handle {
+        opacity: 0.7;
+      }
+
+      .window-frame.maximized .window-resize-handle {
+        display: none;
+      }
+
       ::selection {
-        background: rgba(0, 255, 255, 0.2);
+        background: rgba(125, 211, 252, 0.25);
         color: #fff;
       }
 
-      /* Custom Scrollbar */
       ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
+        width: 8px;
+        height: 8px;
       }
       ::-webkit-scrollbar-track {
         background: transparent;
       }
       ::-webkit-scrollbar-thumb {
-        background: rgba(255,255,255,0.1);
-        border-radius: 3px;
+        background: rgba(148, 163, 184, 0.25);
+        border-radius: 999px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: rgba(255,255,255,0.3);
+        background: rgba(148, 163, 184, 0.5);
+      }
+
+      .custom-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+      }
+
+      .glow {
+        box-shadow: 0 0 10px currentColor, 0 0 4px currentColor;
+        animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+
+      @keyframes pulse-glow {
+        0%, 100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.7;
+        }
+      }
+
+      @keyframes fade-in {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .animate-in {
+        animation: fade-in 0.3s ease-out;
       }
     </style>
 <script type="importmap">

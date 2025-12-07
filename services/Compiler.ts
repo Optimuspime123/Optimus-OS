@@ -16,6 +16,10 @@ interface SymbolInfo {
   elementSize: number;
 }
 
+type ControlContext =
+  | { type: 'loop'; breakJumps: number[]; continueTarget?: number; pendingContinues: number[] }
+  | { type: 'switch'; breakJumps: number[] };
+
 export class Compiler {
   private tokens: Token[] = [];
   private pos: number = 0;
@@ -25,6 +29,7 @@ export class Compiler {
   private dataSegment: number[] = []; 
   private macros: Map<string, string> = new Map();
   private warnings: string[] = [];
+  private controlStack: ControlContext[] = [];
 
   constructor() {}
 
@@ -154,7 +159,7 @@ export class Compiler {
       if (isAlpha(c)) {
         let val = "";
         while (i < source.length && (isAlpha(source[i]) || isNum(source[i]))) val += source[i++];
-        const kw = ['int', 'void', 'char', 'float', 'double', 'return', 'if', 'else', 'while', 'for', 'printf', 'scanf', 'malloc', 'free', 'sin', 'cos', 'tan', 'sqrt', 'pow', 'abs'];
+        const kw = ['int', 'void', 'char', 'float', 'double', 'return', 'if', 'else', 'while', 'for', 'do', 'switch', 'case', 'default', 'break', 'continue', 'printf', 'scanf', 'malloc', 'free', 'sin', 'cos', 'tan', 'sqrt', 'pow', 'abs'];
         tokens.push({ type: kw.includes(val) ? 'KEYWORD' : 'ID', value: val, line });
         continue;
       }
@@ -173,7 +178,7 @@ export class Compiler {
       }
 
       // Single-char symbols
-      if (['+', '-', '*', '/', '%', '=', '(', ')', '{', '}', ';', ',', '<', '>', '&', '[', ']'].includes(c)) {
+      if (['+', '-', '*', '/', '%', '=', '(', ')', '{', '}', ';', ',', '<', '>', '&', '[', ']', ':'].includes(c)) {
         tokens.push({ type: 'SYMBOL', value: c, line }); i++; continue;
       }
       
@@ -204,6 +209,7 @@ export class Compiler {
     this.dataSegment = [];
     this.locals.clear();
     this.localOffset = 0;
+    this.controlStack = [];
     
     const preprocessed = this.preprocess(source);
     this.tokens = this.tokenizeString(preprocessed, 1);
@@ -286,14 +292,39 @@ export class Compiler {
     }
     else if (t.value === 'while') {
       this.consume();
-      const startIdx = this.instructions.length;
+      const condIdx = this.instructions.length;
+      const loopCtx = this.pushLoopContext(condIdx);
       this.consume('SYMBOL', '('); this.parseExpression(); this.consume('SYMBOL', ')');
       const jzIdx = this.emit(OpCode.JZ, 0);
       this.consume('SYMBOL', '{');
       while (this.peek().value !== '}') this.parseStatement();
       this.consume('SYMBOL', '}');
-      this.emit(OpCode.JMP, startIdx); 
-      this.instructions[jzIdx].arg = this.instructions.length; 
+      this.emit(OpCode.JMP, condIdx);
+      const endIdx = this.instructions.length;
+      this.instructions[jzIdx].arg = endIdx;
+      this.patchBreaks(loopCtx, endIdx);
+      this.patchPendingContinues(loopCtx, condIdx);
+      this.popContext('loop');
+    }
+    else if (t.value === 'do') {
+      this.consume();
+      const bodyIdx = this.instructions.length;
+      const loopCtx = this.pushLoopContext();
+      this.consume('SYMBOL', '{');
+      while (this.peek().value !== '}') this.parseStatement();
+      this.consume('SYMBOL', '}');
+      this.consume('KEYWORD', 'while');
+      const condIdx = this.instructions.length;
+      loopCtx.continueTarget = condIdx;
+      this.patchPendingContinues(loopCtx, condIdx);
+      this.consume('SYMBOL', '('); this.parseExpression(); this.consume('SYMBOL', ')');
+      this.consume('SYMBOL', ';');
+      const jzIdx = this.emit(OpCode.JZ, 0);
+      this.emit(OpCode.JMP, bodyIdx);
+      const endIdx = this.instructions.length;
+      this.instructions[jzIdx].arg = endIdx;
+      this.patchBreaks(loopCtx, endIdx);
+      this.popContext('loop');
     }
     else if (t.value === 'for') {
       this.consume(); this.consume('SYMBOL', '(');
@@ -302,7 +333,7 @@ export class Compiler {
           this.parseDeclarationList(baseType, true);
       } else if (this.peek().value !== ';') {
           this.parseExpression();
-          this.emit(OpCode.POP); // Consume initializer result
+          this.emit(OpCode.POP);
           this.consume('SYMBOL', ';');
       } else {
           this.consume('SYMBOL', ';');
@@ -315,11 +346,12 @@ export class Compiler {
       const jzIdx = this.emit(OpCode.JZ, 0);
       this.consume('SYMBOL', ';');
       
-      const bodyJmp = this.emit(OpCode.JMP, 0); 
+      const bodyJmp = this.emit(OpCode.JMP, 0);
       const incIdx = this.instructions.length;
+      const loopCtx = this.pushLoopContext(incIdx);
       if (this.peek().value !== ')') {
           this.parseExpression();
-          this.emit(OpCode.POP); // Consume increment result
+          this.emit(OpCode.POP);
       }
       this.consume('SYMBOL', ')');
       this.emit(OpCode.JMP, condIdx);
@@ -331,8 +363,34 @@ export class Compiler {
       while (this.peek().value !== '}') this.parseStatement();
       this.consume('SYMBOL', '}');
       
-      this.emit(OpCode.JMP, incIdx); 
-      this.instructions[jzIdx].arg = this.instructions.length; 
+      this.emit(OpCode.JMP, incIdx);
+      const endIdx = this.instructions.length;
+      this.instructions[jzIdx].arg = endIdx;
+      this.patchBreaks(loopCtx, endIdx);
+      this.patchPendingContinues(loopCtx, incIdx);
+      this.popContext('loop');
+    }
+    else if (t.value === 'switch') {
+      this.parseSwitchStatement();
+    }
+    else if (t.value === 'break') {
+      this.consume();
+      this.consume('SYMBOL', ';');
+      const ctx = this.controlStack[this.controlStack.length - 1];
+      if (!ctx) this.error("'break' not inside loop or switch");
+      ctx.breakJumps.push(this.emit(OpCode.JMP, 0));
+    }
+    else if (t.value === 'continue') {
+      this.consume();
+      this.consume('SYMBOL', ';');
+      const loopCtx = this.findNearestLoopContext();
+      if (!loopCtx) this.error("'continue' not inside loop");
+      if (loopCtx.continueTarget !== undefined) {
+          this.emit(OpCode.JMP, loopCtx.continueTarget);
+      } else {
+          const idx = this.emit(OpCode.JMP, 0);
+          loopCtx.pendingContinues.push(idx);
+      }
     }
     // Syscalls
     else if (t.value === 'printf') {
@@ -413,6 +471,119 @@ export class Compiler {
     }
 
     if (consumeSemicolon) this.consume('SYMBOL', ';');
+  }
+
+  private pushLoopContext(continueTarget?: number) {
+    const ctx: Extract<ControlContext, { type: 'loop' }> = {
+      type: 'loop',
+      breakJumps: [],
+      continueTarget,
+      pendingContinues: []
+    };
+    this.controlStack.push(ctx);
+    return ctx;
+  }
+
+  private pushSwitchContext() {
+    const ctx: ControlContext = { type: 'switch', breakJumps: [] };
+    this.controlStack.push(ctx);
+    return ctx;
+  }
+
+  private popContext<T extends ControlContext['type']>(expected: T): Extract<ControlContext, { type: T }> {
+    const ctx = this.controlStack.pop();
+    if (!ctx || ctx.type !== expected) this.error('Invalid control flow structure');
+    return ctx as Extract<ControlContext, { type: T }>;
+  }
+
+  private findNearestLoopContext(): Extract<ControlContext, { type: 'loop' }> | null {
+    for (let i = this.controlStack.length - 1; i >= 0; i--) {
+      const ctx = this.controlStack[i];
+      if (ctx.type === 'loop') return ctx;
+    }
+    return null;
+  }
+
+  private patchBreaks(ctx: ControlContext, target: number) {
+    ctx.breakJumps.forEach(idx => this.instructions[idx].arg = target);
+  }
+
+  private patchPendingContinues(ctx: Extract<ControlContext, { type: 'loop' }>, target: number) {
+    ctx.pendingContinues.forEach(idx => this.instructions[idx].arg = target);
+    ctx.pendingContinues = [];
+  }
+
+  private parseCaseConstant(): number {
+    const t = this.peek();
+    if (t.type === 'NUMBER') {
+      return parseFloat(this.consume().value);
+    } else if (t.type === 'CHAR') {
+      return this.consume().value.charCodeAt(0);
+    } else if (t.value === '-') {
+      this.consume();
+      const num = this.consume('NUMBER');
+      return -parseFloat(num.value);
+    } else {
+      this.error(`Expected constant in case label, got ${t.value}`);
+      return 0;
+    }
+  }
+
+  private parseSwitchStatement() {
+    this.consume(); // 'switch'
+    this.consume('SYMBOL', '(');
+    this.parseExpression(); // leave value on stack
+    this.consume('SYMBOL', ')');
+
+    const skipBodiesJmp = this.emit(OpCode.JMP, 0);
+    const switchCtx = this.pushSwitchContext();
+    const caseEntries: Array<{ value: number; target: number }> = [];
+    let defaultTarget: number | null = null;
+
+    this.consume('SYMBOL', '{');
+    while (this.peek().value !== '}') {
+      const next = this.peek();
+      if (next.value === 'case') {
+        this.consume();
+        const caseValue = this.parseCaseConstant();
+        this.consume('SYMBOL', ':');
+        caseEntries.push({ value: caseValue, target: this.instructions.length });
+      } else if (next.value === 'default') {
+        this.consume();
+        this.consume('SYMBOL', ':');
+        defaultTarget = this.instructions.length;
+      } else {
+        this.parseStatement();
+      }
+    }
+    this.consume('SYMBOL', '}');
+
+    const exitJump = this.emit(OpCode.JMP, 0);
+
+    const dispatchStart = this.instructions.length;
+    this.instructions[skipBodiesJmp].arg = dispatchStart;
+
+    for (const entry of caseEntries) {
+      this.emit(OpCode.DUP);
+      this.emit(OpCode.LIT, entry.value);
+      this.emit(OpCode.EQ);
+      const skipIdx = this.emit(OpCode.JZ, 0);
+      this.emit(OpCode.POP);
+      this.emit(OpCode.JMP, entry.target);
+      this.instructions[skipIdx].arg = this.instructions.length;
+    }
+
+    if (defaultTarget !== null) {
+      this.emit(OpCode.POP);
+      this.emit(OpCode.JMP, defaultTarget);
+    } else {
+      this.emit(OpCode.POP);
+    }
+
+    const switchExit = this.instructions.length;
+    this.instructions[exitJump].arg = switchExit;
+    this.patchBreaks(switchCtx, switchExit);
+    this.popContext('switch');
   }
 
   // --- Expression Parser (Precedence Climbing) ---
