@@ -128,7 +128,7 @@ const App: React.FC = () => {
       </div>
 
       {/* Windows Layer */}
-      <div className="absolute inset-0 pointer-events-none z-20">
+      <div className="absolute inset-0 z-20 pointer-events-none">
         <div className="w-full h-full relative">
           {windows.map(win => (
             <Window 

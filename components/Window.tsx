@@ -144,7 +144,7 @@ export const Window: React.FC<WindowProps> = ({ window: win, isActive = false, o
   return (
     <div
       ref={frameRef}
-      className={`window-frame absolute flex flex-col glass-panel overflow-hidden ${isActive ? 'active' : ''} ${isDragging ? 'dragging' : ''} ${win.isMaximized ? 'maximized' : ''}`}
+      className={`window-frame absolute flex flex-col glass-panel overflow-hidden pointer-events-auto ${isActive ? 'active' : ''} ${isDragging ? 'dragging' : ''} ${win.isMaximized ? 'maximized' : ''}`}
       style={frameStyle}
       onMouseDown={() => onFocus(win.id)}
     >
