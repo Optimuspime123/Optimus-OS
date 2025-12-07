@@ -45,12 +45,12 @@ export const Window: React.FC<WindowProps> = ({ window: win, isActive = false, o
   };
 
   const stopGlobalListeners = () => {
-    document.removeEventListener('mousemove', handlePointerMove);
-    document.removeEventListener('mouseup', handlePointerUp);
+    document.removeEventListener('pointermove', handlePointerMove);
+    document.removeEventListener('pointerup', handlePointerUp);
     document.body.style.userSelect = '';
   };
 
-  const handlePointerMove = (event: MouseEvent) => {
+  const handlePointerMove = (event: PointerEvent) => {
     if (dragState.current) {
       const dx = event.clientX - dragState.current.startX;
       const dy = event.clientY - dragState.current.startY;
@@ -99,8 +99,9 @@ export const Window: React.FC<WindowProps> = ({ window: win, isActive = false, o
     return () => stopGlobalListeners();
   }, []);
 
-  const beginDrag = (event: React.MouseEvent) => {
-    if (win.isMaximized || event.button !== 0) return;
+  const beginDrag = (event: React.PointerEvent) => {
+    event.preventDefault();
+    if (win.isMaximized || (event.pointerType === 'mouse' && event.button !== 0)) return;
     if (event.target instanceof Element && event.target.closest('button')) return;
     onFocus(win.id);
     setIsDragging(true);
@@ -113,11 +114,12 @@ export const Window: React.FC<WindowProps> = ({ window: win, isActive = false, o
       dy: 0
     };
     document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', handlePointerMove);
-    document.addEventListener('mouseup', handlePointerUp);
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
   };
 
-  const beginResize = (event: React.MouseEvent) => {
+  const beginResize = (event: React.PointerEvent) => {
+    event.preventDefault();
     event.stopPropagation();
     if (win.isMaximized) return;
     onFocus(win.id);
@@ -131,8 +133,8 @@ export const Window: React.FC<WindowProps> = ({ window: win, isActive = false, o
       nextHeight: win.height
     };
     document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', handlePointerMove);
-    document.addEventListener('mouseup', handlePointerUp);
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
   };
 
   if (win.isMinimized) return null;
@@ -150,7 +152,7 @@ export const Window: React.FC<WindowProps> = ({ window: win, isActive = false, o
     >
       <div
         className={`h-11 flex items-center justify-between px-4 select-none border-b border-white/10 transition-colors ${win.isMaximized ? 'bg-black/40' : 'bg-white/5'} ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-        onMouseDown={beginDrag}
+        onPointerDown={beginDrag}
         onDoubleClick={() => onUpdate(win.id, { isMaximized: !win.isMaximized })}
       >
         <div className="flex items-center gap-3">
@@ -186,7 +188,7 @@ export const Window: React.FC<WindowProps> = ({ window: win, isActive = false, o
       </div>
 
       {!win.isMaximized && (
-        <span className="window-resize-handle" onMouseDown={beginResize} />
+        <span className="window-resize-handle" onPointerDown={beginResize} />
       )}
     </div>
   );

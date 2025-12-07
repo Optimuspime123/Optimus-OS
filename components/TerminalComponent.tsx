@@ -12,6 +12,7 @@ interface TerminalProps {
 export const TerminalComponent: React.FC<TerminalProps> = React.memo(({ onOpenApp }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<Shell>(new Shell());
+  const shellProcessPid = useRef<number | null>(null);
   
   // Terminal State
   const inputBuffer = useRef<string>('');
@@ -20,6 +21,8 @@ export const TerminalComponent: React.FC<TerminalProps> = React.memo(({ onOpenAp
 
   useEffect(() => {
     if (!terminalRef.current) return;
+
+    shellProcessPid.current = processManager.registerSystemProcess('Shell Session');
 
     const term = new Terminal({
       cursorBlink: true,
@@ -220,6 +223,9 @@ export const TerminalComponent: React.FC<TerminalProps> = React.memo(({ onOpenAp
     term.focus();
 
     return () => {
+      if (shellProcessPid.current !== null) {
+        processManager.killProcess(shellProcessPid.current);
+      }
       term.dispose();
       resizeObserver.disconnect();
       if (terminalRef.current) terminalRef.current.removeEventListener('click', handleFocus);
