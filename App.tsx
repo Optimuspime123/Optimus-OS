@@ -26,6 +26,7 @@ const App: React.FC = () => {
       isMaximized: false
     }
   ]);
+  const [activeWindowId, setActiveWindowId] = useState<string>('term-1');
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -34,8 +35,8 @@ const App: React.FC = () => {
 
   const createWindow = useCallback((type: string, arg?: string) => {
     setStartMenuOpen(false);
+    const id = `${type.toLowerCase()}-${Date.now()}`;
     setWindows(prev => {
-      const id = `${type.toLowerCase()}-${Date.now()}`;
       const newWindow: WindowState = {
         id,
         title: type === 'EDITOR' ? `EDIT: ${arg || 'untitled'}` : type,
@@ -51,13 +52,26 @@ const App: React.FC = () => {
       };
       return [...prev, newWindow];
     });
+    setActiveWindowId(id);
   }, []);
 
   const closeWindow = useCallback((id: string) => {
-    setWindows(prev => prev.filter(w => w.id !== id));
-  }, []);
+    setWindows(prev => {
+      const next = prev.filter(w => w.id !== id);
+      if (next.length === 0) {
+        setActiveWindowId('');
+        return next;
+      }
+      if (id === activeWindowId) {
+        const top = next.reduce((acc, curr) => curr.zIndex > acc.zIndex ? curr : acc, next[0]);
+        setActiveWindowId(top.id);
+      }
+      return next;
+    });
+  }, [activeWindowId]);
   
   const focusWindow = useCallback((id: string) => {
+    setActiveWindowId(id);
     setWindows(prev => prev.map(w => w.id === id ? { ...w, zIndex: Date.now() } : w));
   }, []);
 
@@ -114,12 +128,13 @@ const App: React.FC = () => {
       </div>
 
       {/* Windows Layer */}
-      <div className="absolute inset-0 pointer-events-none z-20">
+      <div className="absolute inset-0 z-20 pointer-events-none">
         <div className="w-full h-full relative">
           {windows.map(win => (
             <Window 
               key={win.id} 
-              window={win} 
+              window={win}
+              isActive={win.id === activeWindowId}
               onClose={closeWindow} 
               onFocus={focusWindow}
               onUpdate={updateWindow}
@@ -246,8 +261,8 @@ const App: React.FC = () => {
       )}
 
       {/* Taskbar */}
-      <div className="absolute bottom-0 left-0 right-0 h-12 glass-panel border-t border-white/10 flex items-center px-2 justify-between z-50 pointer-events-auto shadow-[0_-5px_20px_rgba(0,0,0,0.5)]">
-        <div className="flex items-center gap-2 h-full">
+      <div className="absolute bottom-0 left-0 right-0 h-14 bg-black/35 backdrop-blur-2xl border-t border-white/10 flex items-center px-4 justify-between z-50 pointer-events-auto">
+        <div className="flex items-center gap-3 h-full">
           {/* Start Button */}
           <button 
             onClick={(e) => { e.stopPropagation(); setStartMenuOpen(!startMenuOpen); }}
@@ -260,28 +275,31 @@ const App: React.FC = () => {
           <div className="h-5 w-px bg-white/10 mx-1"></div>
 
           {/* Windows */}
-          <div className="flex items-center gap-1">
-            {windows.map(win => (
+          <div className="flex items-center gap-2">
+            {windows.map(win => {
+              const isWindowActive = !win.isMinimized && win.id === activeWindowId;
+              return (
                 <button
-                    key={win.id}
-                    onClick={() => {
+                  key={win.id}
+                  onClick={() => {
                     if (win.isMinimized) updateWindow(win.id, { isMinimized: false });
                     focusWindow(win.id);
-                    }}
-                    className={`group flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition-all border ${
-                    !win.isMinimized && win.zIndex === Math.max(...windows.map(w => w.zIndex))
-                    ? 'bg-white/10 border-white/20 text-white shadow-inner shadow-white/5' 
-                    : 'bg-transparent border-transparent text-gray-400 hover:bg-white/5 hover:text-gray-200'
-                    }`}
+                  }}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-semibold transition-all border ${
+                    isWindowActive
+                      ? 'bg-white/15 border-white/30 text-white shadow-[0_5px_20px_rgba(0,0,0,0.3)]'
+                      : 'bg-transparent border-transparent text-gray-300 hover:bg-white/10 hover:text-white'
+                  }`}
                 >
-                    {win.type === 'TERMINAL' && <Terminal size={14} className={!win.isMinimized ? "text-green-400" : ""} />}
-                    {win.type === 'EDITOR' && <Code size={14} className={!win.isMinimized ? "text-blue-400" : ""} />}
-                    {win.type === 'TASK_MANAGER' && <Cpu size={14} className={!win.isMinimized ? "text-red-400" : ""} />}
-                    {win.type === 'SETTINGS' && <Settings size={14} className={!win.isMinimized ? "text-gray-200" : ""} />}
-                    <span className="max-w-[120px] truncate hidden md:inline">{win.title}</span>
-                    <div className={`w-1 h-1 rounded-full ${!win.isMinimized ? 'bg-blue-400 shadow-[0_0_5px_currentColor]' : 'bg-transparent'} ml-1`}></div>
+                  {win.type === 'TERMINAL' && <Terminal size={14} className={isWindowActive ? 'text-emerald-300' : ''} />}
+                  {win.type === 'EDITOR' && <Code size={14} className={isWindowActive ? 'text-sky-300' : ''} />}
+                  {win.type === 'TASK_MANAGER' && <Cpu size={14} className={isWindowActive ? 'text-rose-300' : ''} />}
+                  {win.type === 'SETTINGS' && <Settings size={14} className={isWindowActive ? 'text-slate-200' : ''} />}
+                  <span className="max-w-[120px] truncate hidden md:inline">{win.title}</span>
+                  <span className={`w-1.5 h-1.5 rounded-full ${!win.isMinimized ? 'bg-[var(--accent)] glow' : 'bg-transparent'}`} />
                 </button>
-            ))}
+              );
+            })}
           </div>
         </div>
 

@@ -226,5 +226,12 @@ export const TerminalComponent: React.FC<TerminalProps> = React.memo(({ onOpenAp
     };
   }, [onOpenApp]);
 
-  return <div className="w-full h-full p-1 bg-[#0c0c14]" ref={terminalRef} />;
+  return (
+    <div className="w-full h-full p-3">
+      <div
+        ref={terminalRef}
+        className="w-full h-full overflow-hidden rounded-2xl border border-white/10 bg-black/75 shadow-inner"
+      />
+    </div>
+  );
 });

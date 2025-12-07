@@ -11,11 +11,14 @@ Optimus-OS is a technological exploration into bringing low-level computing conc
 A fully hand-written **Recursive Descent Compiler** written in TypeScript.
 - **Language Support**: Subset of C (C99 style).
 - **Features**:
-  - `int`, `float`, `char` types.
+  - `int`, `float`, `char`, `double` types.
   - Pointers (`int *p`) and Arrays (`int arr[5]`).
-  - Control Flow: `if`, `else`, `while`, `for`.
+  - Control Flow: `if`, `else`, `while`, `for`, `do-while`, `switch/case/default`.
+  - Loop Control: `break` and `continue` statements.
+  - Multi-variable declarations with initialization: `int a = 1, b = 2, c;`
   - **Preprocessor**: `#define`, `#ifdef`, `#ifndef`, `#endif`.
   - **Memory**: Pointer arithmetic, `malloc`, `free`.
+  - **Math Functions**: `sin`, `cos`, `tan`, `sqrt`, `pow`, `abs`.
   - **String Literals**: Automatically extracted to a static Data Segment.
 
 ### 2. Stack-Based Virtual Machine

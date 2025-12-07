@@ -184,8 +184,8 @@ export const Editor: React.FC<EditorProps> = ({ filePath, onClose }) => {
              const word = content.substring(i, end);
              
              if (['int','float','char','void','double','struct','long','unsigned'].includes(word)) tokenClass = 'text-blue-400 font-bold';
-             else if (['return','if','else','while','for','break','continue','switch','case'].includes(word)) tokenClass = 'text-pink-400 font-bold';
-             else if (['printf','scanf','malloc','free','sizeof','sqrt','pow','sin','cos','tan'].includes(word)) tokenClass = 'text-yellow-200';
+              else if (['return','if','else','while','for','do','break','continue','switch','case','default'].includes(word)) tokenClass = 'text-pink-400 font-bold';
+              else if (['printf','scanf','malloc','free','sizeof','sqrt','pow','sin','cos','tan','abs'].includes(word)) tokenClass = 'text-yellow-200';
              else tokenClass = 'text-gray-200';
              
              tokenVal = word;
